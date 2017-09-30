@@ -1,0 +1,12 @@
+server:
+  applicationConnectors:
+    - type: http
+      port: 8000
+
+database:
+  driverClass: com.mysql.cj.jdbc.Driver
+  user: root
+  password: testpass
+  url: jdbc:mysql://db/challenge
+  properties:
+    useSSL: false

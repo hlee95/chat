@@ -1,0 +1,17 @@
+apply plugin: 'application'
+
+mainClassName = 'Challenge'
+
+repositories {
+    jcenter()
+}
+
+dependencies {
+    compile 'io.dropwizard:dropwizard-core:1.1.0'
+    compile 'io.dropwizard:dropwizard-jdbi:1.1.0'
+    compile 'mysql:mysql-connector-java:6.0.6'
+}
+
+run {
+    args "server", "app.yaml"
+}
