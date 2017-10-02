@@ -16,8 +16,8 @@ type createUserStruct struct {
 
 // Request handler for /users.
 // Expects a POST request with the following parameters in the body
-// - username : maximum 10 characters
-// - password : maximum 72 characters (due to bcrypt limitation)
+// - Username : maximum 10 characters
+// - Password : maximum 72 characters (due to bcrypt limitation)
 // Expects data in JSON, because it's easier to send JSON than url-encoded
 // key value pairs in React, and our frontend is in React.
 //

@@ -15,9 +15,12 @@ const PREPARE_ADD_USER = "INSERT INTO users(username, hash, salt) VALUES(?, ?, ?
 // for the project without affecting the logic in the server.
 //
 // API exposed to server includes the following:
-// - GetHashedPasswordAndSalt(username string)
-// - GetMessages(sender, receiver)
-// - PutMessage(sender, receiver, messageType, messageContent, properties)
+// - NewChatSqlClient()
+// - client.CreateUser(username)
+// - client.CheckUserExists(username)
+// - client.GetUserCredentials(username)
+// - client.GetMessages(sender, receiver)
+// - client.PutMessage(sender, receiver, messageType, messageContent, properties)
 //
 // ** Note that the server is responsible for handling errors propagated
 // up by the db client. **
