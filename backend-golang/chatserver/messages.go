@@ -21,15 +21,7 @@ type fetchMessagesStruct struct {
   PageToLoad      int;
 }
 
-// Request handler for /users.
-// Expects a POST request with the following parameters in the body
-// - Username : maximum 10 characters
-// - Password : maximum 72 characters (due to bcrypt limitation)
-// Expects data in JSON, because it's easier to send JSON than url-encoded
-// key value pairs in React, and our frontend is in React.
-//
-// Sample curl request:
-// curl -d '{"Username":"hanna", "Password":"secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
+// Request handler for /messages.
 func (server *ChatServer) handleMessages(w http.ResponseWriter, r *http.Request) {
   switch r.Method {
   case http.MethodGet:
@@ -46,23 +38,37 @@ func (server *ChatServer) handleMessages(w http.ResponseWriter, r *http.Request)
 
 // Adds a message to the database.
 // Expects the following parameters:
-// - sender username
-// - recipient username
-// - message type
-// - message content
+// - Sender: recipient username
+// - Recipient: recipient username
+// - MessageType: one of "plaintext", "image_link", "video_link"
+// - Content: the text of the message
 func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
+  // Parse request.
+  var body sendMessageStruct
+  decoder := json.NewDecoder(r.Body)
+  if err := decoder.Decode(&body); err != nil {
+    log.Printf("Bad POST request received at /messages, %+v", r)
+    http.Error(w, "bad POST request, could not parse", http.StatusBadRequest)
+    return
+  }
+  senderName := body.Sender
+  recipientName := body.Recipient
+  messageType := body.MessageType
+  content := body.Content
+  // TODO: Can users send messages to themselves? I don't see why not so I'll allow it.
   w.Header().Add("Content-Type", "application/json")
-  id, err := server.db.AddMessage("user1", "user2", "plaintext", "hello world")
+  id, err := server.db.AddMessage(senderName, recipientName, messageType, content)
   if err != nil {
     log.Printf("error: %s", err.Error())
     http.Error(w, "couldn't sent message", http.StatusInternalServerError)
     return
   }
-  // log.Printf("Successfully stored message from %s to %s", senderName, recipientName)
+  // Success.
+  log.Printf("Successfully stored message from %s to %s", senderName, recipientName)
   w.WriteHeader(http.StatusOK)
   if err := json.NewEncoder(w).Encode(map[string]string{
-    "sender": "user1",
-    "recipient": "user2",
+    "sender": senderName,
+    "recipient": recipientName,
     "message_id": strconv.FormatInt(id, 10),
   }); err != nil {
     log.Printf("Error formatting http response, %s", err.Error())

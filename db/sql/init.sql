@@ -29,7 +29,7 @@ CREATE TABLE messages(
   sender_id INT NOT NULL,
   recipient_id INT NOT NULL,
   message_type ENUM('plaintext', 'image_link', 'video_link') NOT NULL,
-  message_content TINYTEXT NOT NULL,
+  message_content TEXT NOT NULL,
   message_metadata_id INT,
   PRIMARY KEY (id)
 );

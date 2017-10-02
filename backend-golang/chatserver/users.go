@@ -39,6 +39,11 @@ func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
     password := body.Password
     log.Printf("Received POST at /users for user %s", username)
     // Check lengths of username and password.
+    if len(username) < 1 || len(password) < 1 {
+      log.Printf("Missing username or password")
+      http.Error(w, "missing username or password", http.StatusUnprocessableEntity)
+      return
+    }
     if len(username) > 10 {
       log.Printf("Username too long")
       http.Error(w, "max username length is 10 characters", http.StatusUnprocessableEntity)
