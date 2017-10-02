@@ -7,14 +7,15 @@ USE challenge;
 # Each is defined and described in this file.
 
 CREATE TABLE test(col VARCHAR(10));
+INSERT INTO test(col) VALUES('ok');
 
 # Store users and their hashed passwords and the salt used to hash.
 # Usernames are limited to 10 chars.
 CREATE TABLE users(
-  id INT NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   username VARCHAR(10) NOT NULL,
   hash BINARY(60) NOT NULL,
-  salt CHAR(8) NOT NULL,
+  salt BINARY(16) NOT NULL,
   PRIMARY KEY (id)
 );
 # Create index for username since that will be the most used query.
@@ -23,7 +24,7 @@ CREATE INDEX user_idx(username);
 # Stores all messages.
 # Message content for now is limited to 255 chars.
 CREATE TABLE messages(
-  id INT NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   sent_time TIMESTAMP NOT NULL,
   sender_id INT NOT NULL,
   recipient_id INT NOT NULL,
@@ -44,12 +45,10 @@ CREATE INDEX sender_recipient_timestamp_idx(sender_id, recipient_id, sent_time)
 # Messages that are image links need a width and height.
 # Messages that are video links need a length and source.
 CREATE TABLE messages_metadata (
-  id INT NOT NULL,
+  id INT NOT NULL AUTO_INCREMENT,
   width SMALLINT,
   height SMALLINT,
   length SMALLINT,
   source VARCHAR(16),
   PRIMARY KEY (id)
 );
-
-INSERT INTO test(col) VALUES('ok');

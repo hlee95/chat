@@ -1,18 +1,16 @@
-package main
+package chatserver
 
 import (
   "encoding/json"
   "log"
   "net/http"
-  _ "golang.org/x/crypto/bcrypt"
 )
 
 const DRIVER_NAME = "mysql"
 const DATA_SOURCE_NAME = "root:testpass@tcp(db:3306)/challenge"
 
 // ChatServer maintains a db connection and any relevant state,
-// and responds to HTTP requests. ChatServer is also responsible
-// for encrypting, decrypting or hashing data as is necessary.
+// and responds to HTTP requests.
 type ChatServer struct {
   db *ChatSQLClient
 }
@@ -39,23 +37,18 @@ func (server *ChatServer) Start() {
 
 // Request handler for /test.
 func (server *ChatServer) handleTest(w http.ResponseWriter, r *http.Request) {
-  result, err := server.db.GetTest()
+  result, err := server.db.Test()
   if err != nil {
     log.Fatal(err)
   }
-
   w.Header().Add("Content-Type", "application/json")
   if err := json.NewEncoder(w).Encode(map[string]string{
-    "result":  result,
+    "result": result,
     "backend": "go",
   }); err != nil {
     log.Panic(err)
   }
-}
-
-// Request handler for /users.
-func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
-  // TODO
+  log.Printf("handled /test request")
 }
 
 // Request handler for /messages
