@@ -24,9 +24,9 @@ type createUserStruct struct {
 // Sample curl request:
 // curl -d '{"Username":"hanna", "Password":"secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
 func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
+  w.Header().Add("Content-Type", "application/json")
   switch r.Method {
   case http.MethodPost:
-    w.Header().Add("Content-Type", "application/json")
     // Parse request.
     var body createUserStruct
     decoder := json.NewDecoder(r.Body)
@@ -52,7 +52,7 @@ func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
     // Respond with StatusConflict (409) if username already exists.
     if server.db.CheckUserExists(username) {
       log.Printf("User %s already exists", username)
-      http.Error(w, "username already exists", http.StatusConflict)
+      http.Error(w, "username already exists (case insensitive)", http.StatusConflict)
       return
     }
     // Hash password and create a new user.
@@ -82,7 +82,6 @@ func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
   default:
     // Unhandled request, respond with StatusMethodNotAllowed (405).
     log.Printf("Unknown request received at /users, %+v", r)
-    w.Header().Add("Content-Type", "application/json")
     http.Error(w, "only POST requests are accepted", http.StatusMethodNotAllowed)
   }
 }

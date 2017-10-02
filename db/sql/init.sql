@@ -19,13 +19,13 @@ CREATE TABLE users(
   PRIMARY KEY (id)
 );
 # Create index for username since that will be the most used query.
-CREATE INDEX user_idx(username);
+CREATE INDEX user_idx on users(username);
 
 # Stores all messages.
 # Message content for now is limited to 255 chars.
+# Store user ids not usernames because we may want to allow changes to usernames.
 CREATE TABLE messages(
   id INT NOT NULL AUTO_INCREMENT,
-  sent_time TIMESTAMP NOT NULL,
   sender_id INT NOT NULL,
   recipient_id INT NOT NULL,
   message_type ENUM('plaintext', 'image_link', 'video_link') NOT NULL,
@@ -35,10 +35,7 @@ CREATE TABLE messages(
 );
 # Create index for sender and recipient to improve performance of recovering
 # message history between two people.
-CREATE INDEX sender_recipient_idx(sender_id, recipient_id);
-# Create index that also includes timestamp to more easily filter for messages
-# by time, for example to only fetch most recent messages.
-CREATE INDEX sender_recipient_timestamp_idx(sender_id, recipient_id, sent_time)
+CREATE INDEX sender_recipient_idx on messages(sender_id, recipient_id);
 
 # Stores optional metadata for messages, so that not every row in the messages
 # table needs to have these fields available.

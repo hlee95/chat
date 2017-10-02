@@ -20,7 +20,7 @@ func (server *ChatServer) Start() {
   // Make db connection.
   db, err := NewChatSqlClient(DRIVER_NAME, DATA_SOURCE_NAME)
   if err != nil {
-    log.Fatal("unable to connect to DB", err)
+    log.Fatal("unable to connect to DB: ", err)
   }
   server.db = db
 
@@ -49,11 +49,5 @@ func (server *ChatServer) handleTest(w http.ResponseWriter, r *http.Request) {
     log.Panic(err)
   }
   log.Printf("handled /test request")
-}
-
-// Request handler for /messages
-func (server *ChatServer) handleMessages(w http.ResponseWriter,
-                                         r *http.Request) {
-  // TODO
 }
 
