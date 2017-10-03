@@ -16,13 +16,13 @@ type createUserStruct struct {
 
 // Request handler for /users.
 // Expects a POST with the following parameters in the body:
-// - Username : maximum 10 characters
-// - Password : maximum 72 characters (due to bcrypt limitation)
+// - username : maximum 10 characters
+// - password : maximum 72 characters (due to bcrypt limitation)
 // Expects data in JSON, because it's easier to send JSON than url-encoded
 // key value pairs in React, and our frontend is in React.
 //
 // Sample curl request:
-// curl -d '{"Username":"hanna", "Password":"secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
+// curl -d '{"username":"hanna", "password":"secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
 func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
   w.Header().Add("Content-Type", "application/json")
   switch r.Method {

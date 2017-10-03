@@ -32,13 +32,13 @@ func (server *ChatServer) handleMessages(w http.ResponseWriter, r *http.Request)
 
 // Adds a message to the database.
 // Expects a POST to /messages with the following parameters in the body:
-// - Sender: recipient username
-// - Recipient: recipient username
-// - MessageType: one of "plaintext", "image_link", "video_link"
-// - Content: the text of the message
+// - sender: recipient username
+// - recipient: recipient username
+// - messageType: one of "plaintext", "image_link", "video_link"
+// - content: the text of the message
 //
 // Sample curl request:
-// curl -d '{"Sender":"user2", "Recipient":"user1", "MessageType":"plaintext", "Content":"Hi there!"}' -H "Content-Type: application/json" -X POST localhost:18000/messages
+// curl -d '{"sender":"user2", "recipient":"user1", "messageType":"plaintext", "content":"Hi there!"}' -H "Content-Type: application/json" -X POST localhost:18000/messages
 func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
   // Parse request.
   var body sendMessageStruct
@@ -52,6 +52,7 @@ func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
   recipientName := body.Recipient
   messageType := body.MessageType
   content := body.Content
+  log.Printf("Received POST at /messages for sender %s and recipient %s", senderName, recipientName)
   // TODO: Can users send messages to themselves? I don't see why not so I'll allow it.
   id, err := server.db.AddMessage(senderName, recipientName, messageType, content)
   if err != nil {
@@ -74,16 +75,16 @@ func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
 
 // Fetches messages between two users.
 // Expects a GET to /messages with the following query parameters:
-// - Sender: sender username
-// - Recipient: recipient username
-// - [MessagesPerPage]: optional number of messages per page
-// - [PageToLoad]: optional page number to show (0 indexed)
+// - sender: sender username
+// - recipient: recipient username
+// - [messagesPerPage]: optional number of messages per page
+// - [pageToLoad]: optional page number to show (0 indexed)
 //
 // Note that the order of the sender and recipient does not matter, they are
 // simply better names than "username1" and "username 2"
 //
 // Sample curl request:
-// curl "localhost:18000/messages?Sender=user1&Recipient=user2&MessagesPerPage=2&PageToLoad=1"
+// curl "localhost:18000/messages?sender=user1&recipient=user2&messagesPerPage=2&pageToLoad=1"
 func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) {
   // Parse request.
   u, err := url.Parse(r.URL.String())
@@ -93,27 +94,28 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
     return
   }
   params := u.Query()
-  if len(params["Sender"]) != 1 || len(params["Recipient"]) != 1 {
+  if len(params["sender"]) != 1 || len(params["recipient"]) != 1 {
     log.Printf("Couldn't parse GET at /messages, %+v", r)
     http.Error(w, "bad GET request at /messages, could not parse", http.StatusBadRequest)
     return
   }
   // Confirm that parameters are all valid.
-  senderName := params.Get("Sender")
-  recipientName := params.Get("Recipient")
-  _, haveMessagesPerPage := params["MessagesPerPage"]
-  _, havePageToLoad := params["PageToLoad"]
+  senderName := params.Get("sender")
+  recipientName := params.Get("recipient")
+  _, haveMessagesPerPage := params["messagesPerPage"]
+  _, havePageToLoad := params["pageToLoad"]
   if (haveMessagesPerPage && !havePageToLoad) ||
      (havePageToLoad && !haveMessagesPerPage) {
-    log.Printf("Must provide both or neither of MessagesPerPage and PageToLoad")
-    http.Error(w, "must provide both or neither of MessagesPerPage and PageToLoad", http.StatusBadRequest)
+    log.Printf("Must provide both or neither of messagesPerPage and pageToLoad")
+    http.Error(w, "must provide both or neither of messagesPerPage and pageToLoad", http.StatusBadRequest)
     return
   }
-  if len(params["MessagesPerPage"]) > 1 || len(params["PageToLoad"]) > 1 {
-    log.Printf("Too many values for MessagesPerPage or PageToLoad")
-    http.Error(w, "too many values for MessagesPerPage or PageToLoad", http.StatusBadRequest)
+  if len(params["messagesPerPage"]) > 1 || len(params["pageToLoad"]) > 1 {
+    log.Printf("Too many values for messagesPerPage or pageToLoad")
+    http.Error(w, "too many values for messagesPerPage or pageToLoad", http.StatusBadRequest)
     return
   }
+  log.Printf("Received GET at /messages for %s and %s", senderName, recipientName)
   // Get messages.
   messages, err := server.db.FetchMessages(senderName, recipientName)
   if err != nil {
@@ -123,16 +125,16 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
   }
   // Return only a subset of the messages if specified.
   if haveMessagesPerPage {
-    messagesPerPage, err := strconv.Atoi(params["MessagesPerPage"][0])
+    messagesPerPage, err := strconv.Atoi(params["messagesPerPage"][0])
     if err != nil {
-      log.Printf("Error parsing MessagesPerPage")
-      http.Error(w, "error parsing MessagesPerPage", http.StatusBadRequest)
+      log.Printf("Error parsing messagesPerPage")
+      http.Error(w, "error parsing messagesPerPage", http.StatusBadRequest)
       return
     }
-    pageToLoad, err := strconv.Atoi(params["PageToLoad"][0])
+    pageToLoad, err := strconv.Atoi(params["pageToLoad"][0])
     if err != nil {
-      log.Printf("Error parsing PageToLoad")
-      http.Error(w, "error parsing PageToLoad", http.StatusBadRequest)
+      log.Printf("Error parsing pageToLoad")
+      http.Error(w, "error parsing pageToLoad", http.StatusBadRequest)
       return
     }
     // Get the correct slice of messages.
