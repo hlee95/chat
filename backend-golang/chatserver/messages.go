@@ -94,6 +94,7 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
   senderName, recipientName, usePagination, messagesPerPage, pageToLoad, err := server.parseFetchMessages(r)
   if (err != nil) {
     http.Error(w, fmt.Sprintf("bad GET request at /messages, could not parse, %s", err.Error()), http.StatusBadRequest)
+    return
   }
   log.Printf("Received GET at /messages for %s and %s", senderName, recipientName)
   // Get messages.
@@ -130,7 +131,6 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
 }
 
 // Parse GET request for /messages.
-// Helper function to increase readability.
 // Returns parsed values or error.
 func (server *ChatServer) parseFetchMessages(r *http.Request) (senderName string, recipientName string, usePagination bool, messagesPerPage int, pageToLoad int, err_ error) {
 // Parse request.

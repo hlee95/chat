@@ -7,6 +7,7 @@ import (
   _ "github.com/go-sql-driver/mysql"
 )
 
+// MySQL queries and statements.
 const INSERT_USER = "INSERT INTO users(username, hash, salt) VALUES(?, ?, ?)"
 const INSERT_MESSAGE = "INSERT INTO messages(sender_id, recipient_id, message_type, message_content, message_metadata_id) VALUES (?, ?, ?, ?, ?)"
 const INSERT_MESSAGE_WITH_NO_METADATA = "INSERT INTO messages(sender_id, recipient_id, message_type, message_content) VALUES (?, ?, ?, ?)"
@@ -17,9 +18,16 @@ const SELECT_ID_FROM_USERNAME = "SELECT id FROM users WHERE username=?"
 const SELECT_USERNAME_FROM_ID = "SELECT username FROM users WHERE id=?"
 const SELECT_IMAGE_METADATA = "SELECT width, height FROM messages_metadata WHERE id=?"
 const SELECT_VIDEO_METADATA = "SELECT length, source FROM messages_metadata WHERE id=?"
-// Selects messages and joins on the metadata_id if possible.
-const SELECT_MESSAGES_BETWEEN_USERS = "SELECT messages.sender_id, messages.recipient_id, messages.message_type, messages.message_content, messages_metadata.width, messages_metadata.height, messages_metadata.length, messages_metadata.source FROM messages LEFT JOIN messages_metadata ON messages_metadata.id=messages.message_metadata_id WHERE (messages.sender_id=? AND messages.recipient_id=?) OR (messages.sender_id=? AND messages.recipient_id=?) ORDER BY messages.id"
+// Selects from messages and joins on the metadata_id if possible.
+const SELECT_MESSAGES_BETWEEN_USERS = `SELECT messages.sender_id, messages.recipient_id, messages.message_type, messages.message_content, ` +
+                                        `messages_metadata.width, messages_metadata.height, messages_metadata.length, messages_metadata.source ` +
+                                      `FROM messages ` +
+                                      `LEFT JOIN messages_metadata ON messages_metadata.id=messages.message_metadata_id ` +
+                                      `WHERE (messages.sender_id=? AND messages.recipient_id=?) OR (messages.sender_id=? AND messages.recipient_id=?) ` +
+                                      `ORDER BY messages.id `
 const SELECT_USER_CREDENTIALS = "SELECT hash, salt FROM users WHERE username=?"
+
+
 
 // ChatSQLClient wraps a connection to the database, and provides an
 // api to the server.
@@ -31,7 +39,7 @@ const SELECT_USER_CREDENTIALS = "SELECT hash, salt FROM users WHERE username=?"
 // - client.CreateUser(username)
 // - client.CheckUserExists(username)
 // - client.GetUserCredentials(username)
-// - client.GetMessages(senderName, recipientName)
+// - client.FetchMessages(senderName, recipientName)
 // - client.AddMessage(senderName, recipientName, messageType, messageContent)
 //
 // ** Note that the server is responsible for handling errors propagated
@@ -89,7 +97,8 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
   switch messageType {
   case MESSAGE_TYPE_PLAINTEXT:
     // For regular messages, insert without any metadata.
-    res, err := client.db.Exec(INSERT_MESSAGE_WITH_NO_METADATA, senderId, recipientId, messageType, content)
+    res, err := client.db.Exec(INSERT_MESSAGE_WITH_NO_METADATA, senderId,
+                               recipientId, messageType, content)
     if err != nil {
       return -1, err
     }
@@ -98,9 +107,11 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
     var res sql.Result
     // First insert the metadata.
     if messageType == MESSAGE_TYPE_IMAGE_LINK {
-      res, err = client.db.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH, IMAGE_HEIGHT)
+      res, err = client.db.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH,
+                                IMAGE_HEIGHT)
     } else {
-      res, err = client.db.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH, VIDEO_SOURCE)
+      res, err = client.db.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH,
+                                VIDEO_SOURCE)
     }
     if err != nil {
       return -1, err
@@ -109,8 +120,9 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
     if err != nil {
       return -1, err
     }
-    // Insert the message.
-    res, err = client.db.Exec(INSERT_MESSAGE, senderId, recipientId, messageType, content, metadataId)
+    // Then insert the message.
+    res, err = client.db.Exec(INSERT_MESSAGE, senderId, recipientId,
+                              messageType, content, metadataId)
     if err != nil {
       return -1, err
     }
@@ -127,11 +139,11 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
   var err error
   requestedSenderId, err := client.getUserId(senderName)
   if err != nil {
-    return make([]*Message, 0), err
+    return nil, err
   }
   requestedRecipientId, err := client.getUserId(recipientName)
   if err != nil {
-    return make([]*Message, 0), err
+    return nil, err
   }
   // Get all rows.
   var messages []*Message
@@ -143,13 +155,16 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
   var height sql.NullInt64
   var length sql.NullInt64
   var source sql.NullString
-  rows, err := client.db.Query(SELECT_MESSAGES_BETWEEN_USERS, requestedSenderId, requestedRecipientId, requestedRecipientId, requestedSenderId)
+  rows, err := client.db.Query(SELECT_MESSAGES_BETWEEN_USERS, requestedSenderId,
+                               requestedRecipientId, requestedRecipientId,
+                               requestedSenderId)
   if err != nil {
-    return make([]*Message, 0), err
+    return nil, err
   }
   for rows.Next() {
-    if err := rows.Scan(&senderId, &recipientId, &messageType, &content, &width, &height, &length, &source); err != nil {
-      return make([]*Message, 0), err
+    if err := rows.Scan(&senderId, &recipientId, &messageType, &content,
+                        &width, &height, &length, &source); err != nil {
+      return nil, err
     }
     sender := senderName
     recipient := recipientName
@@ -177,7 +192,7 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
       break
     default:
       // Should never get here.
-      return make([]*Message, 0), errors.New(fmt.Sprintf("Unknown message type %s", messageType))
+      return nil, errors.New(fmt.Sprintf("Unknown message type %s", messageType))
     }
     messages = append(messages, &Message {
       Sender: sender,

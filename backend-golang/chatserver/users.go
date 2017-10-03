@@ -38,11 +38,12 @@ func (server *ChatServer) handleUsers(w http.ResponseWriter, r *http.Request) {
 // key value pairs in React, and our frontend is in React.
 //
 // Sample curl request:
-// curl -d '{"username":"hanna", "password":"secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
+// curl -d '{"username":"user1", "password":"super-secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
 func (server *ChatServer) createUser(w http.ResponseWriter, r *http.Request) {
   username, password, err := server.parseCreateUser(r)
   if err != nil {
     http.Error(w, fmt.Sprintf("Error: %s", err), http.StatusBadRequest)
+    return
   }
   // Respond with StatusConflict (409) if username already exists.
   if server.db.CheckUserExists(username) {
@@ -77,6 +78,7 @@ func (server *ChatServer) createUser(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper function to parse request to /users.
+// Returns parsed values or error.
 func (server *ChatServer) parseCreateUser(r *http.Request) (username string, password string, err error) {
   // Parse request.
   var body createUserStruct

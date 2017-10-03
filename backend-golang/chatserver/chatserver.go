@@ -5,9 +5,6 @@ import (
   "net/http"
 )
 
-const DRIVER_NAME = "mysql"
-const DATA_SOURCE_NAME = "root:testpass@tcp(db:3306)/challenge"
-
 // ChatServer maintains a db connection and any relevant state,
 // and responds to HTTP requests.
 type ChatServer struct {

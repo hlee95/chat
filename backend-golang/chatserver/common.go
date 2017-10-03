@@ -27,6 +27,10 @@ type MessageMetadata struct {
   Source      string `json:"source"`
 }
 
+// Database information.
+const DRIVER_NAME = "mysql"
+const DATA_SOURCE_NAME = "root:testpass@tcp(db:3306)/challenge"
+
 // Hardcode message metadata for images and videos for now for simplicity.
 const IMAGE_WIDTH = 100
 const IMAGE_HEIGHT = 200
