@@ -30,19 +30,13 @@ const SELECT_USER_CREDENTIALS = "SELECT hash, salt FROM users WHERE username=?"
 // - client.CreateUser(username)
 // - client.CheckUserExists(username)
 // - client.GetUserCredentials(username)
-// - client.GetMessages(sender, recipient)
-// - client.AddMessage(senderName, recipientName, messageType, messageContent, properties)
+// - client.GetMessages(senderName, recipientName)
+// - client.AddMessage(senderName, recipientName, messageType, messageContent)
 //
 // ** Note that the server is responsible for handling errors propagated
 // up by the db client. **
 type ChatSQLClient struct {
   db *sql.DB
-}
-
-func (client *ChatSQLClient) Test() (string, error) {
-  var result string
-  err := client.db.QueryRow(`SELECT col FROM test`).Scan(&result)
-  return result, err
 }
 
 // Given a user, get its id.
@@ -128,27 +122,23 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
   }
   switch messageType {
   case MESSAGE_TYPE_PLAINTEXT:
+    // For regular messages, insert without any metadata.
     res, err := client.db.Exec(INSERT_MESSAGE_WITH_NO_METADATA, senderId, recipientId, messageType, content)
     if err != nil {
       return -1, err
     }
     return res.LastInsertId()
-  case MESSAGE_TYPE_IMAGE_LINK:
+  case MESSAGE_TYPE_IMAGE_LINK, MESSAGE_TYPE_VIDEO_LINK:
+    var res sql.Result
     // First insert the metadata.
-    res, err := client.db.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH, IMAGE_HEIGHT)
-    metadataId, err := res.LastInsertId()
+    if messageType == MESSAGE_TYPE_IMAGE_LINK {
+      res, err = client.db.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH, IMAGE_HEIGHT)
+    } else {
+      res, err = client.db.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH, VIDEO_SOURCE)
+    }
     if err != nil {
       return -1, err
     }
-    // Insert the message.
-    res, err = client.db.Exec(INSERT_MESSAGE, senderId, recipientId, messageType, content, metadataId)
-    if err != nil {
-      return -1, err
-    }
-    return res.LastInsertId()
-  case MESSAGE_TYPE_VIDEO_LINK:
-    // First insert the metadata.
-    res, err := client.db.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH, VIDEO_SOURCE)
     metadataId, err := res.LastInsertId()
     if err != nil {
       return -1, err
@@ -165,6 +155,7 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
 }
 
 // Gets messages between two users.
+// Return an array of pointers to the Messages struct.
 func (client *ChatSQLClient) FetchMessages(senderName string, recipientName string) ([]*Message, error) {
   // Find the associated ids of the two users.
   var err error
@@ -202,20 +193,13 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
     // If there is associated metadata, fetch it.
     if metadata_id.Valid {
       switch messageType {
-      case MESSAGE_TYPE_IMAGE_LINK:
-        metadata, err := client.getImageMetadataFromId(int(metadata_id.Int64))
-        if err != nil {
-          return make([]*Message, 0), err
+      case MESSAGE_TYPE_IMAGE_LINK, MESSAGE_TYPE_VIDEO_LINK:
+        var metadata *MessageMetadata
+        if messageType == MESSAGE_TYPE_IMAGE_LINK {
+          metadata, err = client.getImageMetadataFromId(int(metadata_id.Int64))
+        } else {
+          metadata, err = client.getVideoMetadataFromId(int(metadata_id.Int64))
         }
-        messages = append(messages, &Message {
-          Sender: sender,
-          Recipient: recipient,
-          MessageType: messageType,
-          Content: content,
-          Metadata: metadata,
-        })
-      case MESSAGE_TYPE_VIDEO_LINK:
-        metadata, err := client.getVideoMetadataFromId(int(metadata_id.Int64))
         if err != nil {
           return make([]*Message, 0), err
         }

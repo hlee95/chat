@@ -8,6 +8,7 @@ import (
   "strconv"
 )
 
+// Struct for decoding JSON body for POST requests at /messages.
 type sendMessageStruct struct {
   Sender      string;
   Recipient   string;
@@ -87,6 +88,7 @@ func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
 // curl "localhost:18000/messages?sender=user1&recipient=user2&messagesPerPage=2&pageToLoad=1"
 func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) {
   // Parse request.
+  var err error
   u, err := url.Parse(r.URL.String())
   if err != nil {
     log.Printf("Couldn't parse GET at /messages, %+v", r)
@@ -94,27 +96,43 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
     return
   }
   params := u.Query()
+  // Confirm that parameters are all valid.
   if len(params["sender"]) != 1 || len(params["recipient"]) != 1 {
     log.Printf("Couldn't parse GET at /messages, %+v", r)
     http.Error(w, "bad GET request at /messages, could not parse", http.StatusBadRequest)
     return
   }
-  // Confirm that parameters are all valid.
   senderName := params.Get("sender")
   recipientName := params.Get("recipient")
+  var messagesPerPage int
+  var pageToLoad int
+  // Check that messagesPerPage and pageToLoad either both have 1 value or
+  // both have 0 values provided, and that they are parsable as integers.
   _, haveMessagesPerPage := params["messagesPerPage"]
   _, havePageToLoad := params["pageToLoad"]
   if (haveMessagesPerPage && !havePageToLoad) ||
-     (havePageToLoad && !haveMessagesPerPage) {
-    log.Printf("Must provide both or neither of messagesPerPage and pageToLoad")
-    http.Error(w, "must provide both or neither of messagesPerPage and pageToLoad", http.StatusBadRequest)
+     (havePageToLoad && !haveMessagesPerPage) ||
+     len(params["messagesPerPage"]) > 1 ||
+     len(params["pageToLoad"]) > 1{
+    log.Printf("Expect messagesPerPage and pageToLoad to both have 0 or 1 values")
+    http.Error(w, "expect messagesPerPage and pageToLoad to each have 0 or 1 values", http.StatusBadRequest)
     return
   }
-  if len(params["messagesPerPage"]) > 1 || len(params["pageToLoad"]) > 1 {
-    log.Printf("Too many values for messagesPerPage or pageToLoad")
-    http.Error(w, "too many values for messagesPerPage or pageToLoad", http.StatusBadRequest)
-    return
+  if (haveMessagesPerPage) {
+    messagesPerPage, err = strconv.Atoi(params["messagesPerPage"][0])
+    if err != nil {
+      log.Printf("Error parsing messagesPerPage")
+      http.Error(w, "error parsing messagesPerPage", http.StatusBadRequest)
+      return
+    }
+    pageToLoad, err = strconv.Atoi(params["pageToLoad"][0])
+    if err != nil {
+      log.Printf("Error parsing pageToLoad")
+      http.Error(w, "error parsing pageToLoad", http.StatusBadRequest)
+      return
+    }
   }
+
   log.Printf("Received GET at /messages for %s and %s", senderName, recipientName)
   // Get messages.
   messages, err := server.db.FetchMessages(senderName, recipientName)
@@ -125,25 +143,13 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
   }
   // Return only a subset of the messages if specified.
   if haveMessagesPerPage {
-    messagesPerPage, err := strconv.Atoi(params["messagesPerPage"][0])
-    if err != nil {
-      log.Printf("Error parsing messagesPerPage")
-      http.Error(w, "error parsing messagesPerPage", http.StatusBadRequest)
-      return
-    }
-    pageToLoad, err := strconv.Atoi(params["pageToLoad"][0])
-    if err != nil {
-      log.Printf("Error parsing pageToLoad")
-      http.Error(w, "error parsing pageToLoad", http.StatusBadRequest)
-      return
-    }
     // Get the correct slice of messages.
     start := pageToLoad * messagesPerPage
     end := (pageToLoad + 1) * messagesPerPage
     // Check for boundary conditions.
     if len(messages) <= start || start < 0 || messagesPerPage <= 0 {
-      log.Printf("Impossible pagination request, bad MessagesPerPage and/or PageToLoad")
-      http.Error(w, "desired MessagesPerPage and PageToLoad results in impossible page", http.StatusBadRequest)
+      log.Printf("Impossible pagination request, bad messagesPerPage and/or pageToLoad")
+      http.Error(w, "bad messagesPerPage or pageToLoad, no results found for desired page", http.StatusBadRequest)
       return
     }
     if len(messages) >= end {

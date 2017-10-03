@@ -6,9 +6,6 @@ USE challenge;
 # - messages_metadata
 # Each is defined and described in this file.
 
-CREATE TABLE test(col VARCHAR(10));
-INSERT INTO test(col) VALUES('ok');
-
 # Store users and their hashed passwords and the salt used to hash.
 # Usernames are limited to 10 chars.
 CREATE TABLE users(

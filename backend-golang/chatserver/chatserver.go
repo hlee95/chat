@@ -1,7 +1,6 @@
 package chatserver
 
 import (
-  "encoding/json"
   "log"
   "net/http"
 )
@@ -25,7 +24,6 @@ func (server *ChatServer) Start() {
   server.db = db
 
   // Assign handlers for requests we accept.
-  http.HandleFunc("/test", server.handleTest)
   http.HandleFunc("/users", server.handleUsers)
   http.HandleFunc("/messages", server.handleMessages)
   http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -36,21 +34,5 @@ func (server *ChatServer) Start() {
   if err := http.ListenAndServe(":8000", nil); err != nil {
     log.Fatal(err)
   }
-}
-
-// Request handler for /test.
-func (server *ChatServer) handleTest(w http.ResponseWriter, r *http.Request) {
-  result, err := server.db.Test()
-  if err != nil {
-    log.Fatal(err)
-  }
-  w.Header().Add("Content-Type", "application/json")
-  if err := json.NewEncoder(w).Encode(map[string]string{
-    "result": result,
-    "backend": "go",
-  }); err != nil {
-    log.Panic(err)
-  }
-  log.Printf("handled /test request")
 }
 
