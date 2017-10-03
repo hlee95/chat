@@ -28,6 +28,9 @@ func (server *ChatServer) Start() {
   http.HandleFunc("/test", server.handleTest)
   http.HandleFunc("/users", server.handleUsers)
   http.HandleFunc("/messages", server.handleMessages)
+  http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    w.WriteHeader(http.StatusNotFound)
+  })
 
   // Begin serving, fail on any errors.
   if err := http.ListenAndServe(":8000", nil); err != nil {
