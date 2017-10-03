@@ -17,7 +17,8 @@ const SELECT_ID_FROM_USERNAME = "SELECT id FROM users WHERE username=?"
 const SELECT_USERNAME_FROM_ID = "SELECT username FROM users WHERE id=?"
 const SELECT_IMAGE_METADATA = "SELECT width, height FROM messages_metadata WHERE id=?"
 const SELECT_VIDEO_METADATA = "SELECT length, source FROM messages_metadata WHERE id=?"
-const SELECT_MESSAGES_BETWEEN_USERS = "SELECT sender_id, recipient_id, message_type, message_content, message_metadata_id FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) ORDER BY id"
+// Selects messages and joins on the metadata_id if possible.
+const SELECT_MESSAGES_BETWEEN_USERS = "SELECT messages.sender_id, messages.recipient_id, messages.message_type, messages.message_content, messages_metadata.width, messages_metadata.height, messages_metadata.length, messages_metadata.source FROM messages LEFT JOIN messages_metadata ON messages_metadata.id=messages.message_metadata_id WHERE (messages.sender_id=? AND messages.recipient_id=?) OR (messages.sender_id=? AND messages.recipient_id=?) ORDER BY messages.id"
 const SELECT_USER_CREDENTIALS = "SELECT hash, salt FROM users WHERE username=?"
 
 // ChatSQLClient wraps a connection to the database, and provides an
@@ -44,41 +45,6 @@ func (client *ChatSQLClient) getUserId(username string) (int64, error) {
   var id int64
   err := client.db.QueryRow(SELECT_ID_FROM_USERNAME, username).Scan(&id)
   return id, err
-}
-
-// Get a username by id.
-func (client *ChatSQLClient) getUserById(id int) (string, error) {
-  var username string
-  err := client.db.QueryRow(SELECT_USERNAME_FROM_ID, id).Scan(&username)
-  return username, err
-}
-
-// Get image metadata from its database id.
-func (client *ChatSQLClient) getImageMetadataFromId(id int) (*MessageMetadata, error) {
-  var width int
-  var height int
-  if err := client.db.QueryRow(SELECT_IMAGE_METADATA, id).Scan(&width, &height); err != nil {
-    return nil, err
-  }
-  metadata := &MessageMetadata{
-    Width: width,
-    Height: height,
-  }
-  return metadata, nil
-}
-
-// Get video metadata from its database id.
-func (client *ChatSQLClient) getVideoMetadataFromId(id int) (*MessageMetadata, error) {
-  var length int
-  var source string
-  if err := client.db.QueryRow(SELECT_VIDEO_METADATA, id).Scan(&length, &source); err != nil {
-    return nil, err
-  }
-  metadata := &MessageMetadata{
-    Length: length,
-    Source: source,
-  }
-  return metadata, nil
 }
 
 // Create a new user in the database with the given username, password hash, and salt.
@@ -173,57 +139,53 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
   var recipientId int
   var messageType string
   var content string
-  var metadata_id sql.NullInt64
+  var width sql.NullInt64
+  var height sql.NullInt64
+  var length sql.NullInt64
+  var source sql.NullString
   rows, err := client.db.Query(SELECT_MESSAGES_BETWEEN_USERS, requestedSenderId, requestedRecipientId, requestedRecipientId, requestedSenderId)
   if err != nil {
     return make([]*Message, 0), err
   }
   for rows.Next() {
-    if err := rows.Scan(&senderId, &recipientId, &messageType, &content, &metadata_id); err != nil {
+    if err := rows.Scan(&senderId, &recipientId, &messageType, &content, &width, &height, &length, &source); err != nil {
       return make([]*Message, 0), err
     }
-    sender, err := client.getUserById(senderId)
-    if err != nil {
-      return make([]*Message, 0), err
-    }
-    recipient, err := client.getUserById(recipientId)
-    if err != nil {
-      return make([]*Message, 0), err
+    sender := senderName
+    recipient := recipientName
+    if senderId != int(requestedSenderId) {
+      sender = recipientName
+      recipient = senderName
     }
     // If there is associated metadata, fetch it.
-    if metadata_id.Valid {
-      switch messageType {
-      case MESSAGE_TYPE_IMAGE_LINK, MESSAGE_TYPE_VIDEO_LINK:
-        var metadata *MessageMetadata
-        if messageType == MESSAGE_TYPE_IMAGE_LINK {
-          metadata, err = client.getImageMetadataFromId(int(metadata_id.Int64))
-        } else {
-          metadata, err = client.getVideoMetadataFromId(int(metadata_id.Int64))
-        }
-        if err != nil {
-          return make([]*Message, 0), err
-        }
-        messages = append(messages, &Message {
-          Sender: sender,
-          Recipient: recipient,
-          MessageType: messageType,
-          Content: content,
-          Metadata: metadata,
-        })
-      default:
-        // Should never get here.
-        return make([]*Message, 0), errors.New(fmt.Sprintf("Unknown message type %s", messageType))
+    var metadata *MessageMetadata
+    switch messageType {
+    case MESSAGE_TYPE_PLAINTEXT:
+      metadata = nil
+      break
+    case MESSAGE_TYPE_IMAGE_LINK:
+      metadata = &MessageMetadata {
+        Width: int(width.Int64),
+        Height: int(height.Int64),
       }
-    } else {
-      // No metadata, so just add in the normal message fields.
-      messages = append(messages, &Message {
-        Sender: sender,
-        Recipient: recipient,
-        MessageType: messageType,
-        Content: content,
-        Metadata: nil,
-      })
+      break
+    case MESSAGE_TYPE_VIDEO_LINK:
+      metadata = &MessageMetadata {
+        Length: int(length.Int64),
+        Source: source.String,
+      }
+      break
+    default:
+      // Should never get here.
+      return make([]*Message, 0), errors.New(fmt.Sprintf("Unknown message type %s", messageType))
     }
+    messages = append(messages, &Message {
+      Sender: sender,
+      Recipient: recipient,
+      MessageType: messageType,
+      Content: content,
+      Metadata: metadata,
+    })
   }
   return messages, nil
 }

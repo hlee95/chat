@@ -12,6 +12,7 @@ import (
 //  be pulled into its own package and provide functions for logging in,
 //  creating and invalidating session tokens, etc.)
 
+// For brcypt, controls how "difficult" it is to brute force the hash.
 const HASH_COST = 14
 
 // Returns a random string of the given length in bytes.

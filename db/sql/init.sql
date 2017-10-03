@@ -6,7 +6,7 @@ USE challenge;
 # - messages_metadata
 # Each is defined and described in this file.
 
-# Store users and their hashed passwords and the salt used to hash.
+# Stores users and their hashed passwords and the salt used to hash.
 # Usernames are limited to 10 chars.
 CREATE TABLE users(
   id INT NOT NULL AUTO_INCREMENT,
