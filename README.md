@@ -27,3 +27,26 @@ To see code changes, rebuild by adding `--build` when starting
     docker-compose up --build <backend or fullstack>
 
 If you run into issues connecting to the db on startup, try restarting (without the `-v` flag).
+
+## Sample cURL commands
+
+To create a new user:
+
+    curl -i -d '{"username":"user1", "password":"super-secret"}' -H "Content-Type: application/json" -X POST localhost:18000/users
+
+To send a message:
+
+    curl -i -d '{"sender":"user2", "recipient":"user1", "messageType":"plaintext", "content":"Hi there!"}' -H "Content-Type: application/json" -X POST localhost:18000/messages
+
+where `messageType` is one of `"plaintext"`, `"image_link"` or `"video_link"`.
+
+Example of an `image_link` message:
+
+    curl -i -d '{"sender":"user2", "recipient":"user1", "messageType":"image_link", "content":"https://www.what-dog.net/Images/faces2/scroll0015.jpg"}' -H "Content-Type: application/json" -X POST localhost:18000/messages
+
+To fetch a conversation:
+
+    curl -i "localhost:18000/messages?sender=user1&recipient=user2&messagesPerPage=2&pageToLoad=1"
+
+where `messagesPerPage` and `pageToLoad` are optional and can be usd for pagination, and `pageToLoad` is 0-indexed.
+
