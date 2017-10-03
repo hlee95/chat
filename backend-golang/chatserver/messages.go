@@ -46,23 +46,20 @@ func (server *ChatServer) handleMessages(w http.ResponseWriter, r *http.Request)
 // curl -d '{"sender":"user2", "recipient":"user1", "messageType":"plaintext", "content":"Hi there!"}' -H "Content-Type: application/json" -X POST localhost:18000/messages
 func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
   // Parse request.
-  var body sendMessageStruct
-  decoder := json.NewDecoder(r.Body)
-  if err := decoder.Decode(&body); err != nil {
-    log.Printf("Bad POST request received at /messages, %+v", r)
-    http.Error(w, "bad POST request at /messages, could not parse", http.StatusBadRequest)
+  senderName, recipientName, messageType, content, err := server.parseSendMessage(r)
+  if err != nil {
+    http.Error(w,fmt.Sprintf(
+      "bad POST request at /messages, couldn't parse, error: %s",
+      err.Error()),
+    http.StatusBadRequest)
     return
   }
-  senderName := body.Sender
-  recipientName := body.Recipient
-  messageType := body.MessageType
-  content := body.Content
 
   log.Printf("Received POST at /messages for sender %s and recipient %s", senderName, recipientName)
   id, err := server.db.AddMessage(senderName, recipientName, messageType, content)
   if err != nil {
     log.Printf("Error adding message to db: %s", err.Error())
-    http.Error(w, "couldn't sent message", http.StatusInternalServerError)
+    http.Error(w, "Couldn't send message", http.StatusInternalServerError)
     return
   }
   // Success.
@@ -77,6 +74,38 @@ func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
     http.Error(w, "error generating response", http.StatusInternalServerError)
   }
 }
+
+// Parse POST request for /messages.
+// Returns parsed values or error.
+func (server *ChatServer) parseSendMessage(r *http.Request) (senderName string, recipientName string, messageType string, content string, err error) {
+  var body sendMessageStruct
+  decoder := json.NewDecoder(r.Body)
+  if err := decoder.Decode(&body); err != nil {
+    return "", "", "", "", errors.New("couldn't decode JSON")
+  }
+  senderName = body.Sender
+  recipientName = body.Recipient
+  messageType = body.MessageType
+  content = body.Content
+  // Ignore empty messages.
+  if len(content) <= 0 {
+    return "", "", "", "", errors.New(fmt.Sprintf("rejecting empty message"))
+  }
+  if !server.db.CheckUserExists(senderName) {
+    return "", "", "", "", errors.New(fmt.Sprintf("no such user %s", senderName))
+  }
+  if !server.db.CheckUserExists(recipientName) {
+    return "", "", "", "", errors.New(fmt.Sprintf("no such user %s", recipientName))
+  }
+  if messageType != MESSAGE_TYPE_PLAINTEXT && messageType != MESSAGE_TYPE_IMAGE_LINK &&
+     messageType != MESSAGE_TYPE_VIDEO_LINK {
+      return "", "", "", "", errors.New(fmt.Sprintf("invalid messageType %s", messageType))
+  }
+  return senderName, recipientName, messageType, content, nil
+}
+
+
+
 
 // Fetches messages between two users.
 // Expects a GET to /messages with the following query parameters:
