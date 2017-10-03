@@ -13,8 +13,8 @@ import (
 
 // Struct for decoding JSON body for POST requests at /users.
 type createUserStruct struct {
-  Username string;
-  Password string;
+  Username string
+  Password string
 }
 
 // Request handler for /users.

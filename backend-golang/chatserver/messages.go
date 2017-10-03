@@ -12,10 +12,10 @@ import (
 
 // Struct for decoding JSON body for POST requests at /messages.
 type sendMessageStruct struct {
-  Sender      string;
-  Recipient   string;
-  MessageType string;
-  Content     string;
+  Sender      string
+  Recipient   string
+  MessageType string
+  Content     string
 }
 
 // Request handler for /messages.
@@ -35,7 +35,7 @@ func (server *ChatServer) handleMessages(w http.ResponseWriter, r *http.Request)
 
 // Adds a message to the database.
 // Expects a POST to /messages with the following parameters in the body:
-// - sender: recipient username
+// - sender: sender username
 // - recipient: recipient username
 // - messageType: one of "plaintext", "image_link", "video_link"
 // - content: the text of the message
