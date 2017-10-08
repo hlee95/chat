@@ -59,7 +59,7 @@ func (server *ChatServer) sendMessage(w http.ResponseWriter, r *http.Request) {
   id, err := server.db.AddMessage(senderName, recipientName, messageType, content)
   if err != nil {
     log.Printf("Error adding message to db: %s", err.Error())
-    http.Error(w, "Couldn't send message", http.StatusInternalServerError)
+    http.Error(w, fmt.Sprintf("Couldn't send message: %s", err.Error()), http.StatusInternalServerError)
     return
   }
   // Success.
@@ -91,12 +91,6 @@ func (server *ChatServer) parseSendMessage(r *http.Request) (senderName string, 
   if len(content) <= 0 {
     return "", "", "", "", errors.New(fmt.Sprintf("rejecting empty message"))
   }
-  if !server.db.CheckUserExists(senderName) {
-    return "", "", "", "", errors.New(fmt.Sprintf("no such user %s", senderName))
-  }
-  if !server.db.CheckUserExists(recipientName) {
-    return "", "", "", "", errors.New(fmt.Sprintf("no such user %s", recipientName))
-  }
   if messageType != MESSAGE_TYPE_PLAINTEXT && messageType != MESSAGE_TYPE_IMAGE_LINK &&
      messageType != MESSAGE_TYPE_VIDEO_LINK {
       return "", "", "", "", errors.New(fmt.Sprintf("invalid messageType %s", messageType))
@@ -120,38 +114,23 @@ func (server *ChatServer) parseSendMessage(r *http.Request) (senderName string, 
 // Sample curl request:
 // curl "localhost:18000/messages?sender=user1&recipient=user2&messagesPerPage=2&pageToLoad=1"
 func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) {
-  senderName, recipientName, usePagination, messagesPerPage, pageToLoad, err := server.parseFetchMessages(r)
+  fetchMessagesParams, err := server.parseFetchMessages(r)
   if (err != nil) {
     http.Error(w, fmt.Sprintf("bad GET request at /messages, could not parse, %s", err.Error()), http.StatusBadRequest)
     return
   }
-  log.Printf("Received GET at /messages for %s and %s", senderName, recipientName)
+  log.Printf("Received GET at /messages for %s and %s", fetchMessagesParams.senderName,
+                                                        fetchMessagesParams.recipientName)
   // Get messages.
-  messages, err := server.db.FetchMessages(senderName, recipientName)
+  messages, err := server.db.FetchMessages(fetchMessagesParams)
   if err != nil {
     log.Printf("Error fetching messages from db: %s", err.Error())
-    http.Error(w, "couldn't fetch messages", http.StatusInternalServerError)
+    http.Error(w, fmt.Sprintf("Couldn't fetch messages: %s", err.Error()), http.StatusInternalServerError)
     return
   }
-  // Return only a subset of the messages if specified.
-  if usePagination {
-    // Get the correct slice of messages.
-    start := pageToLoad * messagesPerPage
-    end := (pageToLoad + 1) * messagesPerPage
-    // Check for boundary conditions.
-    if len(messages) <= start || start < 0 || messagesPerPage <= 0 {
-      log.Printf("Impossible pagination request, bad messagesPerPage and/or pageToLoad")
-      http.Error(w, "bad messagesPerPage or pageToLoad, no results found for desired page", http.StatusBadRequest)
-      return
-    }
-    if len(messages) >= end {
-      messages = messages[start:end]
-    } else {
-      messages = messages[start:]
-    }
-  }
   // Try to send response.
-  log.Printf("Successfully fetched messages between %s and %s", senderName, recipientName)
+  log.Printf("Successfully fetched messages between %s and %s",
+             fetchMessagesParams.senderName, fetchMessagesParams.recipientName)
   w.WriteHeader(http.StatusOK)
   if err := json.NewEncoder(w).Encode(messages); err != nil {
     log.Printf("Error formatting http response, %s", err.Error())
@@ -161,19 +140,21 @@ func (server *ChatServer) fetchMessages(w http.ResponseWriter, r *http.Request) 
 
 // Parse GET request for /messages.
 // Returns parsed values or error.
-func (server *ChatServer) parseFetchMessages(r *http.Request) (senderName string, recipientName string, usePagination bool, messagesPerPage int, pageToLoad int, err_ error) {
-// Parse request.
-  var err error
+func (server *ChatServer) parseFetchMessages(r *http.Request) (fetchMessagesParams *FetchMessagesParams, err error) {
+  fetchMessagesParams = &FetchMessagesParams{}
+  // Parse request.
   u, err := url.Parse(r.URL.String())
   if err != nil {
-    return "", "", false, -1, -1, errors.New("Couldn't parse GET at /messages")
+    err = errors.New("Couldn't parse GET at /messages")
+    return
   }
   params := u.Query()
   if len(params["sender"]) != 1 || len(params["recipient"]) != 1 {
-    return "", "", false, -1, -1, errors.New("Couldn't parse GET at /messages")
+    err = errors.New("Couldn't parse GET at /messages")
+    return
   }
-  senderName = params.Get("sender")
-  recipientName = params.Get("recipient")
+  fetchMessagesParams.senderName = params.Get("sender")
+  fetchMessagesParams.recipientName = params.Get("recipient")
   // Check that messagesPerPage and pageToLoad either both have 1 value or
   // both have 0 values provided, and that they are parsable as integers.
   _, haveMessagesPerPage := params["messagesPerPage"]
@@ -182,19 +163,21 @@ func (server *ChatServer) parseFetchMessages(r *http.Request) (senderName string
      (havePageToLoad && !haveMessagesPerPage) ||
      len(params["messagesPerPage"]) > 1 ||
      len(params["pageToLoad"]) > 1{
-    return "", "", false, -1, -1, errors.New("Expect messagesPerPage and pageToLoad to both have 0 or 1 values")
+    err = errors.New("Expect messagesPerPage and pageToLoad to both have 0 or 1 values")
+    return
   }
   if (haveMessagesPerPage) {
-    messagesPerPage, err = strconv.Atoi(params["messagesPerPage"][0])
+    fetchMessagesParams.usePagination = true
+    fetchMessagesParams.messagesPerPage, err = strconv.Atoi(params["messagesPerPage"][0])
     if err != nil {
-      return "", "", false, -1, -1, errors.New("Error parsing messagesPerPage")
+      err = errors.New("Error parsing messagesPerPage")
+      return
     }
-    pageToLoad, err = strconv.Atoi(params["pageToLoad"][0])
+    fetchMessagesParams.pageToLoad, err = strconv.Atoi(params["pageToLoad"][0])
     if err != nil {
-      return "", "", false, -1, -1, errors.New("Error parsing pageToLoad")
+      err = errors.New("Error parsing pageToLoad")
+      return
     }
-    return senderName, recipientName, true, messagesPerPage, pageToLoad, nil
-  } else {
-    return senderName, recipientName, false, -1, -1, nil
   }
+  return
 }

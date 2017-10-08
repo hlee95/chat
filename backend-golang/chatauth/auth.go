@@ -33,18 +33,16 @@ func GenerateSalt(numBytes int) []byte {
 }
 
 // Given a salt and a password, generate the hash.
-func HashPasswordWithSalt(password string, salt []byte) ([]byte, error) {
-  hash, err := bcrypt.GenerateFromPassword(
-    append([]byte(password), salt...),
-    HASH_COST)
+func HashPasswordWithSalt(password string) ([]byte, error) {
+  hash, err := bcrypt.GenerateFromPassword([]byte(password), HASH_COST)
   return hash, err
 }
 
 // Given a password, salt and hash, return token if correct, otherwise error.
 // This token can be used to validate future requests from this user for the
 // remainder of their session (although that is not implemented in this project).
-func Authenticate(password string, salt []byte, hash []byte) ([]byte, error) {
-  if err := bcrypt.CompareHashAndPassword(hash, append([]byte(password), salt...)); err != nil {
+func Authenticate(password string, hash []byte) ([]byte, error) {
+  if err := bcrypt.CompareHashAndPassword(hash, []byte(password)); err != nil {
     return nil, err
   }
   // Password is good, return a token (256 bits).

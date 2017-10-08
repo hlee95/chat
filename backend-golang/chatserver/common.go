@@ -27,6 +27,15 @@ type MessageMetadata struct {
   Source      string `json:"source"`
 }
 
+// Struct for specifying a fetch messages request.
+type FetchMessagesParams struct {
+  senderName string
+  recipientName string
+  usePagination bool
+  messagesPerPage int
+  pageToLoad int
+}
+
 // Database information.
 const DRIVER_NAME = "mysql"
 const DATA_SOURCE_NAME = "root:testpass@tcp(db:3306)/challenge"

@@ -4,11 +4,12 @@ import (
   "database/sql"
   "errors"
   "fmt"
+  "log"
   _ "github.com/go-sql-driver/mysql"
 )
 
 // MySQL queries and statements.
-const INSERT_USER = "INSERT INTO users(username, hash, salt) VALUES(?, ?, ?)"
+const INSERT_USER = "INSERT INTO users(username, hash) VALUES(?, ?)"
 const INSERT_MESSAGE = "INSERT INTO messages(sender_id, recipient_id, message_type, message_content, message_metadata_id) VALUES (?, ?, ?, ?, ?)"
 const INSERT_MESSAGE_WITH_NO_METADATA = "INSERT INTO messages(sender_id, recipient_id, message_type, message_content) VALUES (?, ?, ?, ?)"
 const INSERT_MESSAGES_IMAGE_METADATA = "INSERT INTO messages_metadata(width, height) VALUES(?, ?)"
@@ -25,7 +26,9 @@ const SELECT_MESSAGES_BETWEEN_USERS = `SELECT messages.sender_id, messages.recip
                                       `LEFT JOIN messages_metadata ON messages_metadata.id=messages.message_metadata_id ` +
                                       `WHERE (messages.sender_id=? AND messages.recipient_id=?) OR (messages.sender_id=? AND messages.recipient_id=?) ` +
                                       `ORDER BY messages.id `
-const SELECT_USER_CREDENTIALS = "SELECT hash, salt FROM users WHERE username=?"
+const SELECT_MESSAGES_BETWEEN_USERS_WITH_LIMIT = SELECT_MESSAGES_BETWEEN_USERS +
+                                                 `LIMIT ?, ?`
+const SELECT_USER_CREDENTIALS = "SELECT hash FROM users WHERE username=?"
 
 
 
@@ -57,29 +60,18 @@ func (client *ChatSQLClient) getUserId(username string) (int64, error) {
 
 // Create a new user in the database with the given username, password hash, and salt.
 // Returns the id of the newly created user, or an error.
-func (client *ChatSQLClient) CreateUser(username string, hash []byte, salt []byte) (id int64, err error) {
-  res, err := client.db.Exec(INSERT_USER, username, hash, salt)
+func (client *ChatSQLClient) CreateUser(username string, hash []byte) (id int64, err error) {
+  res, err := client.db.Exec(INSERT_USER, username, hash)
   if err != nil {
     return -1, err
   }
   return res.LastInsertId()
 }
 
-// Returns true if the given username already exists in the database.
-func (client *ChatSQLClient) CheckUserExists(username string) bool {
-  _, err := client.getUserId(username)
-  return err == nil
-}
-
 // Retrieves the password hash and salt for the given username.
-func (client *ChatSQLClient) GetUserCredentials(username string) (hash_ []byte, salt_ []byte, err_ error) {
-  var hash []byte
-  var salt []byte
-  err := client.db.QueryRow(SELECT_USER_CREDENTIALS, username).Scan(&hash, &salt)
-  if err != nil {
-    return nil, nil, err
-  }
-  return hash, salt, nil
+func (client *ChatSQLClient) GetUserCredentials(username string) (hash []byte, err error) {
+  err = client.db.QueryRow(SELECT_USER_CREDENTIALS, username).Scan(&hash)
+  return
 }
 
 // Adds a new message to the database. Returns the id of that message, or an error.
@@ -88,11 +80,11 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
   var err error
   senderId, err := client.getUserId(senderName)
   if err != nil {
-    return -1, err
+    return -1, errors.New(fmt.Sprintf("no such user %s", senderName))
   }
   recipientId, err := client.getUserId(recipientName)
   if err != nil {
-    return -1, err
+    return -1, errors.New(fmt.Sprintf("no such user %s", recipientName))
   }
   switch messageType {
   case MESSAGE_TYPE_PLAINTEXT:
@@ -104,26 +96,35 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
     }
     return res.LastInsertId()
   case MESSAGE_TYPE_IMAGE_LINK, MESSAGE_TYPE_VIDEO_LINK:
+    // TODO: Use a prepared statement.
+    tx, err := client.db.Begin()
     var res sql.Result
     // First insert the metadata.
     if messageType == MESSAGE_TYPE_IMAGE_LINK {
-      res, err = client.db.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH,
+      res, err = tx.Exec(INSERT_MESSAGES_IMAGE_METADATA, IMAGE_WIDTH,
                                 IMAGE_HEIGHT)
     } else {
-      res, err = client.db.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH,
+      res, err = tx.Exec(INSERT_MESSAGES_VIDEO_METADATA, VIDEO_LENGTH,
                                 VIDEO_SOURCE)
     }
     if err != nil {
+      tx.Rollback()
       return -1, err
     }
     metadataId, err := res.LastInsertId()
     if err != nil {
+      tx.Rollback()
       return -1, err
     }
     // Then insert the message.
-    res, err = client.db.Exec(INSERT_MESSAGE, senderId, recipientId,
+    res, err = tx.Exec(INSERT_MESSAGE, senderId, recipientId,
                               messageType, content, metadataId)
     if err != nil {
+      tx.Rollback()
+      return -1, err
+    }
+    if err = tx.Commit(); err != nil {
+      tx.Rollback()
       return -1, err
     }
     return res.LastInsertId()
@@ -133,20 +134,20 @@ func (client *ChatSQLClient) AddMessage(senderName string, recipientName string,
 }
 
 // Gets messages between two users.
-// Return an array of pointers to the Messages struct.
-func (client *ChatSQLClient) FetchMessages(senderName string, recipientName string) ([]*Message, error) {
+// Return an array of pointers to the Message struct.
+func (client *ChatSQLClient) FetchMessages(params *FetchMessagesParams) (messages []*Message, err error) {
   // Find the associated ids of the two users.
-  var err error
-  requestedSenderId, err := client.getUserId(senderName)
+  requestedSenderId, err := client.getUserId(params.senderName)
   if err != nil {
+    err = errors.New(fmt.Sprintf("no such user %s", params.senderName))
     return nil, err
   }
-  requestedRecipientId, err := client.getUserId(recipientName)
+  requestedRecipientId, err := client.getUserId(params.recipientName)
   if err != nil {
+    err = errors.New(fmt.Sprintf("no such user %s", params.recipientName))
     return nil, err
   }
-  // Get all rows.
-  var messages []*Message
+  // Get all rows, limit the number of entries depending on pagination.
   var senderId int
   var recipientId int
   var messageType string
@@ -155,24 +156,34 @@ func (client *ChatSQLClient) FetchMessages(senderName string, recipientName stri
   var height sql.NullInt64
   var length sql.NullInt64
   var source sql.NullString
-  rows, err := client.db.Query(SELECT_MESSAGES_BETWEEN_USERS, requestedSenderId,
+  var rows *sql.Rows
+  if params.usePagination {
+    start := params.pageToLoad * params.messagesPerPage
+    end := (params.pageToLoad + 1) * params.messagesPerPage
+    log.Printf("start %d end %d", start, end)
+    rows, err = client.db.Query(SELECT_MESSAGES_BETWEEN_USERS_WITH_LIMIT, requestedSenderId,
+                               requestedRecipientId, requestedRecipientId,
+                               requestedSenderId, start, end)
+  } else {
+    rows, err = client.db.Query(SELECT_MESSAGES_BETWEEN_USERS, requestedSenderId,
                                requestedRecipientId, requestedRecipientId,
                                requestedSenderId)
+  }
   if err != nil {
-    return nil, err
+    return nil, errors.New("bad messagesPerPage or pageToLoad, no results found for desired page")
   }
   for rows.Next() {
     if err := rows.Scan(&senderId, &recipientId, &messageType, &content,
                         &width, &height, &length, &source); err != nil {
       return nil, err
     }
-    sender := senderName
-    recipient := recipientName
+    sender := params.senderName
+    recipient := params.recipientName
     if senderId != int(requestedSenderId) {
-      sender = recipientName
-      recipient = senderName
+      sender = params.recipientName
+      recipient = params.senderName
     }
-    // If there is associated metadata, fetch it.
+    // If there is associated metadata, save it in the MessageMetadata struct.
     var metadata *MessageMetadata
     switch messageType {
     case MESSAGE_TYPE_PLAINTEXT:

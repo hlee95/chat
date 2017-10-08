@@ -10,9 +10,8 @@ USE challenge;
 # Usernames are limited to 10 chars.
 CREATE TABLE users(
   id INT NOT NULL AUTO_INCREMENT,
-  username VARCHAR(10) NOT NULL,
+  username VARCHAR(10) NOT NULL UNIQUE,
   hash BINARY(60) NOT NULL,
-  salt BINARY(16) NOT NULL,
   PRIMARY KEY (id)
 );
 # Create index for username since that will be the most used query.
@@ -28,7 +27,9 @@ CREATE TABLE messages(
   message_type ENUM('plaintext', 'image_link', 'video_link') NOT NULL,
   message_content TEXT NOT NULL,
   message_metadata_id INT,
-  PRIMARY KEY (id)
+  PRIMARY KEY (id),
+  FOREIGN KEY (sender_id) REFERENCES users(id),
+  FOREIGN KEY (recipient_id) REFERENCES users(id)
 );
 # Create index for sender and recipient to improve performance of recovering
 # message history between two people.
